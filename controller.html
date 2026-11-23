@@ -404,7 +404,7 @@ function demoStep(t){
   T.roll=14*Math.sin(t/1.7)+S.roll*10; T.pitch=10*Math.sin(t/2.3)-S.pitch*10;
   T.vbat=3.85; T.low=false; T.gyro=true; T.reason=0; T.t=performance.now(); T.have=true;
   T.state=S.arm?1:0; const b=S.arm?0.1+S.thr*0.8:0;
-  T.mot=[b-T.roll*0.01+T.pitch*0.01,b-T.roll*0.01-T.pitch*0.01,b+T.roll*0.01-T.pitch*0.01,b+T.roll*0.01+T.pitch*0.01].map(v=>clamp(v,0,1));
+  T.mot=[b+T.roll*0.01-T.pitch*0.01,b+T.roll*0.01+T.pitch*0.01,b-T.roll*0.01+T.pitch*0.01,b-T.roll*0.01-T.pitch*0.01].map(v=>clamp(v,0,1));
   if(!S.arm)T.mot=[0,0,0,0];
   Object.assign(G,{rkp:0.002,rkd:0.00003,ap:4,idle:0.08,maxang:20}); applyGains();
 }
