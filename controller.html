@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b0f14">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>Drona Controller</title>
+<style>
+:root{--bg:#0b0f14;--bar:#0e1520;--panel:#121a23;--line:#243344;--txt:#e6edf3;--dim:#8aa0b4;
+  --acc:#35d0a0;--warn:#ffb020;--bad:#ff4d5e;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+  font:14px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;
+  overscroll-behavior:none;user-select:none;-webkit-user-select:none;touch-action:none}
+button,input{font:inherit;color:inherit}
+#app{display:flex;flex-direction:column;height:100%;padding:0 env(safe-area-inset-right) 0 env(safe-area-inset-left)}
+#bar{display:flex;align-items:center;gap:6px;height:42px;flex:none;padding:0 8px;background:var(--bar);border-bottom:1px solid var(--line)}
+#bar .sp{flex:1}
+.b{height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:#182433;cursor:pointer;white-space:nowrap}
+.b:active{background:#22344a}
+.b.on{border-color:var(--acc);color:var(--acc)}
+.b.pri{background:var(--acc);border-color:var(--acc);color:#04251b;font-weight:600}
+.b[disabled]{opacity:.4;pointer-events:none}
+#dot{width:10px;height:10px;border-radius:50%;background:#556;flex:none}
+#stat{color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#editbar{display:none;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 8px;background:#10241f;border-bottom:1px solid var(--acc);font-size:13px}
+.editing #editbar{display:flex}
+#editbar label{display:flex;align-items:center;gap:4px}
+#stage{position:relative;flex:1;min-height:0}
+.w{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.w>.t{position:absolute;left:8px;top:5px;font-size:10px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase;pointer-events:none;z-index:2}
+.w canvas{position:absolute;inset:0;width:100%;height:100%}
+.editing .w{outline:2px dashed var(--acc);outline-offset:-2px;cursor:move}
+.editing .w>*:not(.rz){pointer-events:none!important}
+.rz{display:none;position:absolute;right:0;bottom:0;width:30px;height:30px;background:linear-gradient(135deg,transparent 50%,var(--acc) 50%);cursor:nwse-resize;z-index:5;touch-action:none}
+.editing .rz{display:block}
+#w-tune{z-index:10;touch-action:manipulation}
+
+/* throttle + yaw sliders */
+.trk{position:absolute;background:#0b121a;border:1px solid var(--line);border-radius:10px;overflow:hidden;touch-action:none}
+.trk.v{left:22%;right:22%;top:22px;bottom:26px}
+.trk.h{left:12px;right:12px;top:44%;height:34%;min-height:28px;transform:translateY(-50%)}
+.trk .fill{position:absolute;background:rgba(53,208,160,.35)}
+.trk.v .fill{left:0;right:0;bottom:0;height:0}
+.trk.h .fill{top:0;bottom:0}
+.trk .kn{position:absolute;background:var(--acc);border-radius:6px}
+.trk.v .kn{left:0;right:0;height:12px;margin-bottom:-6px}
+.trk.h .kn{top:0;bottom:0;width:12px;margin-left:-6px}
+.trk .mid{position:absolute;background:var(--line)}
+.trk.h .mid{left:50%;top:0;bottom:0;width:2px}
+.val{position:absolute;left:0;right:0;bottom:4px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums;pointer-events:none}
+#w-yaw .val{bottom:6px}
+/* joystick */
+.base{position:absolute;left:50%;top:50%;border-radius:50%;background:radial-gradient(#0e1822,#0a1017);border:2px solid var(--line);touch-action:none}
+.base:before,.base:after{content:"";position:absolute;background:var(--line)}
+.base:before{left:50%;top:8%;bottom:8%;width:1px}
+.base:after{top:50%;left:8%;right:8%;height:1px}
+.jk{position:absolute;left:31%;top:31%;width:38%;height:38%;border-radius:50%;background:var(--acc);opacity:.9;box-shadow:0 0 0 4px rgba(53,208,160,.18)}
+/* arm + kill */
+.big{position:absolute;inset:22px 8px 8px;border-radius:10px;border:2px solid var(--line);background:#182433;font-size:20px;font-weight:700;letter-spacing:.06em;display:flex;align-items:center;justify-content:center;touch-action:none}
+#armBtn.on{background:#3a1d22;border-color:var(--bad);color:var(--bad)}
+#killBtn{background:#3a1117;border-color:var(--bad);color:#ff8a96}
+#killBtn:active{background:var(--bad);color:#fff}
+/* telemetry */
+.tel{position:absolute;inset:24px 10px 4px;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-content:center;font-size:12px;font-variant-numeric:tabular-nums}
+.tel span:nth-child(odd){color:var(--dim)}
+.bat{height:8px;border-radius:4px;background:#0b121a;border:1px solid var(--line);overflow:hidden;align-self:center}
+.bat i{display:block;height:100%;width:0;background:var(--acc)}
+.chip{font-weight:700}
+/* tuning */
+.tune{position:absolute;inset:22px 10px 8px;overflow:auto;touch-action:pan-y;display:flex;flex-direction:column;gap:5px}
+.tr{display:grid;grid-template-columns:76px 1fr 64px;gap:8px;align-items:center}
+.tr input[type=range]{width:100%;accent-color:var(--acc);touch-action:manipulation}
+.tr b{font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
+.trow{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+#toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:8px 14px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20;max-width:90%;text-align:center}
+#toast.show{opacity:1}
+#rot{display:none;position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:20;background:#3a2a08;border:1px solid var(--warn);color:var(--warn);padding:4px 10px;border-radius:8px;font-size:12px;pointer-events:none}
+@media (orientation:portrait){#rot{display:block}}
+#msg{display:none;padding:10px 14px;background:#3a1d22;color:#ffb3bb;font-size:13px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <button class="b pri" id="bConn">Connect</button>
+    <span id="dot"></span><span id="stat">not connected</span>
+    <span class="sp"></span>
+    <button class="b" id="bTune">Tune</button>
+    <button class="b" id="bEdit">Layout</button>
+    <button class="b" id="bDemo">Demo</button>
+    <button class="b" id="bFs" title="Full screen">&#x26F6;</button>
+  </div>
+  <div id="msg"></div>
+  <div id="editbar"></div>
+  <div id="stage"><div id="toast"></div><div id="rot">Rotate the phone to landscape</div></div>
+</div>
+
+<script>
+"use strict";
+/* =====================  constants / protocol  ===================== */
+const SVC ='7d6a0001-5a7c-4e2b-9c1a-d20a00000001';
+const CTRL='7d6a0002-5a7c-4e2b-9c1a-d20a00000001';   // phone -> drone, 8 bytes, write without response
+const TELE='7d6a0003-5a7c-4e2b-9c1a-d20a00000001';   // drone -> phone, notify
+const CMD ='7d6a0004-5a7c-4e2b-9c1a-d20a00000001';   // phone -> drone, text commands
+const D2R=Math.PI/180;
+const $=(s,r=document)=>r.querySelector(s);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const REASON={0:'',1:'Throttle not at zero',2:'Gyro not calibrated',3:'IMU read problem',4:'Drone not level',
+  5:'Battery too low to arm',6:'Link lost',7:'KILL',8:'Tilt cut-off',9:'IMU failure',10:'Battery low: motors cut',
+  11:'MPU config lost',12:'ARM switch off'};
+
+/* =====================  state  ===================== */
+const S={thr:0,yaw:0,roll:0,pitch:0,arm:false,killUntil:0};
+const T={roll:0,pitch:0,vbat:0,state:0,mot:[0,0,0,0],low:false,gyro:false,reason:0,t:0,have:false};
+const G={rkp:null,rkd:null,ap:null,idle:null,maxang:null,t:0};
+const V={roll:0,pitch:0,mot:[0,0,0,0]};     // smoothed values for drawing
+let connected=false, demo=false, editing=false, device=null, server=null, chCtrl=null, chCmd=null, chTele=null;
+let sending=false, seq=0, armSince=0, tries=0, gattQ=Promise.resolve(), wake=null;
+
+/* =====================  layout  ===================== */
+const DEF={
+  thr:    {t:'Throttle',     x:1, y:3, w:9, h:94},
+  drone:  {t:'Drone',        x:11,y:3, w:25,h:50},
+  horizon:{t:'Horizon',      x:37,y:3, w:27,h:60},
+  tel:    {t:'Telemetry',    x:66,y:3, w:33,h:35},
+  yaw:    {t:'Yaw',          x:11,y:56,w:25,h:40},
+  arm:    {t:'Arm',          x:37,y:66,w:13,h:30},
+  kill:   {t:'Kill',         x:51,y:66,w:13,h:30},
+  joy:    {t:'Roll / Pitch', x:66,y:41,w:33,h:55},
+  tune:   {t:'Tuning',       x:20,y:3, w:60,h:94}
+};
+const LKEY='drona.layout.v1';
+function loadLayout(){
+  let o={}; try{o=JSON.parse(localStorage.getItem(LKEY)||'{}')}catch(e){}
+  const r={}; for(const id in DEF) r[id]=Object.assign({vis:id!=='tune'},DEF[id],o[id]||{});
+  return r;
+}
+function saveLayout(){ try{localStorage.setItem(LKEY,JSON.stringify(L))}catch(e){} }
+let L=loadLayout();
+const stage=$('#stage'), els={};
+function place(id){
+  const e=els[id], l=L[id];
+  e.style.left=l.x+'%'; e.style.top=l.y+'%'; e.style.width=l.w+'%'; e.style.height=l.h+'%';
+  e.style.display=l.vis?'':'none';
+}
+
+/* =====================  widgets  ===================== */
+const HTML={
+  thr:`<div class="trk v"><div class="fill"></div><div class="kn"></div></div><div class="val">0%</div>`,
+  yaw:`<div class="trk h"><div class="mid"></div><div class="fill"></div><div class="kn"></div></div><div class="val">0</div>`,
+  joy:`<div class="base"><div class="jk"></div></div>`,
+  arm:`<div class="big" id="armBtn">ARM</div>`,
+  kill:`<div class="big" id="killBtn">KILL</div>`,
+  drone:`<canvas></canvas>`,
+  horizon:`<canvas></canvas>`,
+  tel:`<div class="tel">
+    <span>Battery</span><span id="tBatt">--</span>
+    <span></span><div class="bat"><i id="tBar"></i></div>
+    <span>State</span><span class="chip" id="tState">--</span>
+    <span>Link</span><span id="tLink">--</span>
+    <span>Roll/Pitch</span><span id="tRP">--</span></div>`,
+  tune:`<div class="tune" id="tuneBox"></div>`
+};
+for(const id in DEF){
+  const e=document.createElement('div'); e.className='w'; e.id='w-'+id;
+  e.innerHTML=`<div class="t">${DEF[id].t}</div>`+HTML[id]+`<div class="rz"></div>`;
+  stage.appendChild(e); els[id]=e; place(id);
+}
+
+/* ---- toast ---- */
+let toastT=0;
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2200)}
+
+/* ---- throttle (stays where you leave it) and yaw (springs back) ---- */
+function bindSlider(id,vertical,spring){
+  const el=els[id], trk=$('.trk',el); let pid=null;
+  function set(e){
+    const r=trk.getBoundingClientRect();
+    if(vertical) S.thr=clamp(1-(e.clientY-r.top)/r.height,0,1);
+    else S.yaw=clamp(((e.clientX-r.left)/r.width)*2-1,-1,1);
+  }
+  el.addEventListener('pointerdown',e=>{if(editing)return;pid=e.pointerId;el.setPointerCapture(pid);set(e)});
+  el.addEventListener('pointermove',e=>{if(e.pointerId===pid)set(e)});
+  const end=e=>{if(e.pointerId!==pid)return;pid=null;if(spring)S.yaw=0};
+  el.addEventListener('pointerup',end);el.addEventListener('pointercancel',end);
+}
+bindSlider('thr',true,false); bindSlider('yaw',false,true);
+
+/* ---- joystick ---- */
+(function(){
+  const el=els.joy, base=$('.base',el), knob=$('.jk',el); let pid=null;
+  function pos(e){
+    const r=base.getBoundingClientRect(), R=r.width/2;
+    let dx=e.clientX-(r.left+R), dy=e.clientY-(r.top+R); const m=Math.hypot(dx,dy);
+    if(m>R){dx*=R/m;dy*=R/m}
+    S.roll=dx/R; S.pitch=-dy/R;             // push up = forward = positive pitch
+    knob.style.transform=`translate(${dx}px,${dy}px)`;
+  }
+  el.addEventListener('pointerdown',e=>{if(editing)return;pid=e.pointerId;el.setPointerCapture(pid);pos(e)});
+  el.addEventListener('pointermove',e=>{if(e.pointerId===pid)pos(e)});
+  const end=e=>{if(e.pointerId!==pid)return;pid=null;S.roll=S.pitch=0;knob.style.transform=''};
+  el.addEventListener('pointerup',end);el.addEventListener('pointercancel',end);
+  new ResizeObserver(()=>{const s=Math.max(60,Math.min(el.clientWidth,el.clientHeight-24)*.9);
+    base.style.width=base.style.height=s+'px';base.style.marginLeft=base.style.marginTop=(-s/2+8)+'px';
+    base.style.marginTop=(-s/2+10)+'px'}).observe(el);
+})();
+
+/* ---- arm / kill ---- */
+$('#armBtn').addEventListener('pointerdown',()=>{
+  if(editing)return;
+  if(!S.arm){
+    if(!connected&&!demo){toast('Connect to the drone first');return}
+    if(S.thr>0.03){toast('Throttle to zero first');return}
+    S.arm=true;
+  } else S.arm=false;
+});
+$('#killBtn').addEventListener('pointerdown',()=>{
+  if(editing)return;
+  S.arm=false;S.thr=0;S.killUntil=performance.now()+600;toast('KILL sent');
+});
+
+/* ---- tuning panel ---- */
+const TUNE=[
+  {k:'rkp',   l:'Rate P',  min:0.0005,max:0.005,  step:0.00001,d:5,extra:{rki:1.5}},
+  {k:'rkd',   l:'Rate D',  min:0,     max:0.0001, step:0.000001,d:6},
+  {k:'ap',    l:'Angle P', min:1,     max:10,     step:0.1,d:1},
+  {k:'idle',  l:'Idle',    min:0.03,  max:0.2,    step:0.005,d:3},
+  {k:'maxang',l:'Max angle',min:5,    max:35,     step:1,d:0}
+];
+(function(){
+  const box=$('#tuneBox');
+  box.innerHTML=TUNE.map(p=>`<div class="tr"><span>${p.l}</span><input type="range" id="tn-${p.k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${p.min}"><b id="tv-${p.k}">--</b></div>`).join('')+
+   `<div class="trow"><button class="b" data-c="lvl">Level cal</button><button class="b" data-c="cal">Gyro cal</button><button class="b pri" data-c="save">Save to drone</button></div>
+    <div id="tnote" style="color:var(--dim);font-size:12px">Changes only apply while disarmed. Level cal on a flat surface, then Save.</div>`;
+  for(const p of TUNE){
+    const inp=$('#tn-'+p.k); let tm=0;
+    inp.addEventListener('pointerdown',()=>inp.dataset.drag=1);
+    const done=()=>delete inp.dataset.drag;
+    inp.addEventListener('pointerup',done);inp.addEventListener('pointercancel',done);
+    inp.addEventListener('input',()=>{
+      const v=parseFloat(inp.value); $('#tv-'+p.k).textContent=v.toFixed(p.d);
+      clearTimeout(tm);tm=setTimeout(()=>{
+        sendCmd(`set ${p.k} ${v.toFixed(p.d+1)}`);
+        if(p.extra) for(const k in p.extra) sendCmd(`set ${k} ${(v*p.extra[k]).toFixed(p.d+1)}`);
+      },150);
+    });
+  }
+  box.addEventListener('click',e=>{
+    const c=e.target.dataset&&e.target.dataset.c; if(!c)return;
+    if(!connected&&!demo){toast('Not connected');return}
+    sendCmd(c); toast(c==='save'?'Saved to drone':c==='lvl'?'Level calibration sent':'Gyro calibration: keep it still');
+  });
+})();
+function applyGains(){
+  for(const p of TUNE){
+    const inp=$('#tn-'+p.k); if(G[p.k]==null||inp.dataset.drag||document.activeElement===inp)continue;
+    inp.value=G[p.k]; $('#tv-'+p.k).textContent=(+G[p.k]).toFixed(p.d);
+  }
+}
+
+/* =====================  drawing  ===================== */
+function fit(c){const d=devicePixelRatio||1,w=Math.round(c.clientWidth*d),h=Math.round(c.clientHeight*d);
+  if(c.width!==w||c.height!==h){c.width=w;c.height=h}return d}
+
+function drawHorizon(c,roll,pitch){
+  const d=fit(c),ctx=c.getContext('2d'),W=c.width,H=c.height;ctx.clearRect(0,0,W,H);
+  const cx=W/2,cy=H/2+6*d,R=Math.min(W,H)*0.42,ppd=R/28,off=pitch*ppd;
+  ctx.save();ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.clip();
+  ctx.translate(cx,cy);ctx.rotate(-roll*D2R);        // right side down => horizon turns counter-clockwise
+  ctx.fillStyle='#2b6fb3';ctx.fillRect(-3*R,-3*R+off,6*R,3*R);
+  ctx.fillStyle='#7a4a22';ctx.fillRect(-3*R,off,6*R,3*R);
+  ctx.strokeStyle='#fff';ctx.fillStyle='#fff';ctx.lineWidth=2*d;
+  ctx.beginPath();ctx.moveTo(-3*R,off);ctx.lineTo(3*R,off);ctx.stroke();
+  ctx.lineWidth=1.5*d;ctx.font=`${10*d}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const p of [-20,-10,10,20]){
+    const y=off-p*ppd,hw=R*0.22;
+    ctx.beginPath();ctx.moveTo(-hw,y);ctx.lineTo(hw,y);ctx.stroke();
+    ctx.fillText(Math.abs(p),hw+12*d,y);
+  }
+  ctx.restore();
+  ctx.lineWidth=3*d;ctx.strokeStyle='#243344';ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.stroke();
+  // roll pointer riding on the rim
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(-roll*D2R);ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.moveTo(0,-R+2*d);ctx.lineTo(-6*d,-R+13*d);ctx.lineTo(6*d,-R+13*d);ctx.fill();ctx.restore();
+  ctx.fillStyle='#ffb020';ctx.beginPath();ctx.moveTo(cx,cy-R-1*d);ctx.lineTo(cx-5*d,cy-R-10*d);ctx.lineTo(cx+5*d,cy-R-10*d);ctx.fill();
+  // fixed aircraft symbol
+  ctx.strokeStyle='#ffb020';ctx.lineWidth=3.5*d;ctx.beginPath();
+  ctx.moveTo(cx-R*.5,cy);ctx.lineTo(cx-R*.15,cy);ctx.lineTo(cx-R*.15,cy+7*d);
+  ctx.moveTo(cx+R*.5,cy);ctx.lineTo(cx+R*.15,cy);ctx.lineTo(cx+R*.15,cy+7*d);ctx.stroke();
+  ctx.fillStyle='#ffb020';ctx.beginPath();ctx.arc(cx,cy,3*d,0,7);ctx.fill();
+}
+
+function mix(p){ // dark slate -> accent by motor power 0..1
+  const a=[28,42,56],b=[53,208,160],c=[255,176,32];
+  const k=clamp(p,0,1),t=k<.7?k/.7:(k-.7)/.3,f=k<.7?[a,b]:[b,c];
+  return `rgb(${f[0].map((v,i)=>Math.round(v+(f[1][i]-v)*t)).join(',')})`;
+}
+function drawDrone(c,roll,pitch,mot){
+  const d=fit(c),ctx=c.getContext('2d'),W=c.width,H=c.height;ctx.clearRect(0,0,W,H);
+  const cx=W/2,cy=H*0.54,S0=Math.min(W*0.25,H*0.31),E=32*D2R;
+  const cr=Math.cos(roll*D2R),sr=Math.sin(roll*D2R),cp=Math.cos(pitch*D2R),sp=Math.sin(pitch*D2R);
+  function proj(x,y,z,tilt){
+    let x1=x,y1=y,z1=z;
+    if(tilt){x1=x*cr+z*sr;z1=-x*sr+z*cr;const y2=y1*cp-z1*sp,z2=y1*sp+z1*cp;y1=y2;z1=z2}
+    const up=z1*Math.cos(E)+y1*Math.sin(E),dep=y1*Math.cos(E)-z1*Math.sin(E),k=1/(1+dep*0.12);
+    return{x:cx+x1*S0*k,y:cy-up*S0*k,dep,k};
+  }
+  // level reference ring
+  ctx.strokeStyle='#243344';ctx.lineWidth=1.5*d;ctx.setLineDash([4*d,4*d]);ctx.beginPath();
+  for(let i=0;i<=48;i++){const a=i/48*6.2832,p=proj(Math.cos(a)*1.55,Math.sin(a)*1.55,0,false);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)}
+  ctx.stroke();ctx.setLineDash([]);
+  const M=[[1,1,0],[1,-1,0],[-1,-1,0],[-1,1,0]].map((q,i)=>Object.assign(proj(q[0],q[1],q[2],true),{i}));
+  const C=proj(0,0,0,true),N=proj(0,1.45,0,true);
+  ctx.strokeStyle='#5c7186';ctx.lineWidth=4*d;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(M[0].x,M[0].y);ctx.lineTo(M[2].x,M[2].y);ctx.moveTo(M[1].x,M[1].y);ctx.lineTo(M[3].x,M[3].y);ctx.stroke();
+  ctx.fillStyle='#8aa0b4';ctx.beginPath();ctx.arc(C.x,C.y,9*d*C.k,0,7);ctx.fill();
+  ctx.strokeStyle='#ffb020';ctx.lineWidth=3*d;ctx.beginPath();ctx.moveTo(C.x,C.y);ctx.lineTo(N.x,N.y);ctx.stroke();
+  ctx.fillStyle='#ffb020';ctx.beginPath();ctx.arc(N.x,N.y,4*d,0,7);ctx.fill();
+  ctx.font=`${11*d}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
+  M.sort((a,b)=>b.dep-a.dep).forEach(m=>{
+    const r=S0*0.34*m.k;
+    ctx.fillStyle=mix(mot[m.i]);ctx.strokeStyle='#e6edf3';ctx.lineWidth=1.5*d;
+    ctx.beginPath();ctx.ellipse(m.x,m.y,r,r*0.62,0,0,7);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#fff';ctx.fillText('M'+(m.i+1),m.x,m.y-1*d);
+    ctx.fillStyle='#8aa0b4';ctx.fillText(Math.round(mot[m.i]*100)+'%',m.x,m.y+r*0.62+10*d);
+  });
+}
+
+/* =====================  link: send / receive  ===================== */
+const i8=v=>Math.round(clamp(v,-1,1)*100)&255;
+function packet(){
+  const b=new Uint8Array(8), kill=performance.now()<S.killUntil;
+  b[0]=0xD1; b[1]=Math.round(clamp(S.thr,0,1)*250); b[2]=i8(S.roll); b[3]=i8(S.pitch); b[4]=i8(S.yaw);
+  b[5]=(S.arm&&!kill?1:0)|(kill?2:0); b[6]=(seq++)&255;
+  let x=0; for(let i=0;i<7;i++)x^=b[i]; b[7]=x; return b;
+}
+setInterval(()=>{
+  if(!connected||!chCtrl||sending)return;
+  sending=true;
+  const p=packet(), f=chCtrl.writeValueWithoutResponse?chCtrl.writeValueWithoutResponse(p):chCtrl.writeValue(p);
+  f.catch(()=>{}).finally(()=>{sending=false});
+},40);
+
+function sendCmd(txt){
+  if(demo){return}
+  if(!connected||!chCmd)return;
+  const data=new TextEncoder().encode(txt);
+  gattQ=gattQ.then(()=>chCmd.writeValue(data)).catch(()=>{});
+}
+function onTele(ev){
+  const dv=ev.target.value,n=dv.byteLength; if(n<2)return;
+  let x=0; for(let i=0;i<n-1;i++)x^=dv.getUint8(i); if(x!==dv.getUint8(n-1))return;
+  const type=dv.getUint8(0);
+  if(type===0xD2&&n===15){
+    T.roll=dv.getInt16(1,true)/100; T.pitch=dv.getInt16(3,true)/100; T.vbat=dv.getUint16(5,true)/1000;
+    T.state=dv.getUint8(7); for(let i=0;i<4;i++)T.mot[i]=dv.getUint8(8+i)/100;
+    const f=dv.getUint8(12); T.low=!!(f&1); T.gyro=!!(f&2); T.reason=dv.getUint8(13); T.t=performance.now(); T.have=true;
+  } else if(type===0xD3&&n===12){
+    G.rkp=dv.getUint16(1,true)/1e5; G.rkd=dv.getUint16(3,true)/1e6; G.ap=dv.getUint16(5,true)/100;
+    G.idle=dv.getUint16(7,true)/1000; G.maxang=dv.getUint16(9,true)/10; G.t=performance.now(); applyGains();
+  }
+}
+
+/* =====================  connection  ===================== */
+function setStat(txt,col){ $('#stat').textContent=txt; $('#dot').style.background=col; }
+function showMsg(t){const m=$('#msg');m.style.display=t?'block':'none';m.textContent=t||''}
+async function wire(){
+  server=await device.gatt.connect();
+  const svc=await server.getPrimaryService(SVC);
+  chCtrl=await svc.getCharacteristic(CTRL); chCmd=await svc.getCharacteristic(CMD); chTele=await svc.getCharacteristic(TELE);
+  chTele.addEventListener('characteristicvaluechanged',onTele);
+  await chTele.startNotifications();
+  connected=true; tries=0; T.have=false; S.arm=false; S.thr=0;
+  setStat('connected','#35d0a0'); $('#bConn').textContent='Disconnect';
+  try{ if(navigator.wakeLock) wake=await navigator.wakeLock.request('screen'); }catch(e){}
+}
+async function connect(){
+  if(!navigator.bluetooth){showMsg('This browser has no Web Bluetooth. Open this page in Chrome on Android (HTTPS link).');return}
+  try{
+    setStat('searching...','#ffb020');
+    device=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'Drona'}],optionalServices:[SVC]});
+    device.addEventListener('gattserverdisconnected',onDisc);
+    setStat('connecting...','#ffb020'); await wire();
+  }catch(e){ setStat('not connected','#556'); if(e&&e.name!=='NotFoundError')toast('Connect failed: '+(e.message||e)); }
+}
+function onDisc(){
+  connected=false; chCtrl=chCmd=chTele=null; S.arm=false; S.thr=0; T.have=false;
+  $('#bConn').textContent='Connect';
+  if(tries<10&&device){ tries++; setStat('link lost, retrying '+tries+'/10','#ff4d5e');
+    setTimeout(async()=>{ if(connected||!device)return; try{ await wire(); }catch(e){ onDisc(); } },1500);
+  } else setStat('disconnected','#556');
+}
+$('#bConn').addEventListener('click',()=>{
+  if(demo)return;
+  if(connected){ tries=99; try{device.gatt.disconnect()}catch(e){} }
+  else { tries=0; connect(); }
+});
+
+/* =====================  demo mode (no drone needed)  ===================== */
+function demoStep(t){
+  T.roll=14*Math.sin(t/1.7)+S.roll*10; T.pitch=10*Math.sin(t/2.3)-S.pitch*10;
+  T.vbat=3.85; T.low=false; T.gyro=true; T.reason=0; T.t=performance.now(); T.have=true;
+  T.state=S.arm?1:0; const b=S.arm?0.1+S.thr*0.8:0;
+  T.mot=[b-T.roll*0.01+T.pitch*0.01,b-T.roll*0.01-T.pitch*0.01,b+T.roll*0.01-T.pitch*0.01,b+T.roll*0.01+T.pitch*0.01].map(v=>clamp(v,0,1));
+  if(!S.arm)T.mot=[0,0,0,0];
+  Object.assign(G,{rkp:0.002,rkd:0.00003,ap:4,idle:0.08,maxang:20}); applyGains();
+}
+$('#bDemo').addEventListener('click',()=>{
+  demo=!demo; $('#bDemo').classList.toggle('on',demo);
+  if(demo){setStat('DEMO (no drone)','#ffb020');S.arm=false;S.thr=0}
+  else setStat(connected?'connected':'not connected',connected?'#35d0a0':'#556');
+});
+
+/* =====================  layout editing  ===================== */
+(function(){
+  const eb=$('#editbar');
+  eb.innerHTML=Object.keys(DEF).map(id=>`<label><input type="checkbox" data-id="${id}"> ${DEF[id].t}</label>`).join('')+
+   `<button class="b" id="eMirror">Mirror left/right</button><button class="b" id="eReset">Reset</button><button class="b pri" id="eDone">Done</button>`;
+  const sync=()=>eb.querySelectorAll('input').forEach(i=>i.checked=L[i.dataset.id].vis);
+  eb.addEventListener('change',e=>{const id=e.target.dataset.id;if(!id)return;L[id].vis=e.target.checked;place(id);saveLayout()});
+  $('#eMirror').onclick=()=>{for(const id in L){L[id].x=Math.round((100-L[id].x-L[id].w)*10)/10;place(id)}saveLayout()};
+  $('#eReset').onclick=()=>{try{localStorage.removeItem(LKEY)}catch(e){}L=loadLayout();for(const id in L)place(id);sync()};
+  const toggle=on=>{editing=on;document.body.classList.toggle('editing',on);$('#bEdit').classList.toggle('on',on);if(on){sync();for(const id in L){}}};
+  $('#bEdit').onclick=()=>toggle(!editing); $('#eDone').onclick=()=>toggle(false);
+  $('#bTune').onclick=()=>{L.tune.vis=!L.tune.vis;place('tune');saveLayout();$('#bTune').classList.toggle('on',L.tune.vis)};
+  $('#bTune').classList.toggle('on',L.tune.vis);
+
+  // drag + resize (percent of the stage)
+  let act=null;
+  stage.addEventListener('pointerdown',e=>{
+    if(!editing)return; const w=e.target.closest('.w'); if(!w)return;
+    const id=w.id.slice(2),r=stage.getBoundingClientRect();
+    act={id,rz:e.target.classList.contains('rz'),sx:e.clientX,sy:e.clientY,r,o:Object.assign({},L[id]),pid:e.pointerId};
+    stage.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  stage.addEventListener('pointermove',e=>{
+    if(!act||e.pointerId!==act.pid)return;
+    const dx=(e.clientX-act.sx)/act.r.width*100,dy=(e.clientY-act.sy)/act.r.height*100,l=L[act.id],o=act.o;
+    if(act.rz){l.w=clamp(o.w+dx,6,100-o.x);l.h=clamp(o.h+dy,8,100-o.y)}
+    else{l.x=clamp(o.x+dx,0,100-o.w);l.y=clamp(o.y+dy,0,100-o.h)}
+    place(act.id);
+  });
+  const end=e=>{if(act&&e.pointerId===act.pid){act=null;saveLayout()}};
+  stage.addEventListener('pointerup',end);stage.addEventListener('pointercancel',end);
+})();
+
+/* =====================  misc buttons  ===================== */
+$('#bFs').onclick=async()=>{
+  try{ if(document.fullscreenElement)await document.exitFullscreen();
+       else{await document.documentElement.requestFullscreen();try{await screen.orientation.lock('landscape')}catch(e){}} }catch(e){}
+};
+document.addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('visibilitychange',()=>{ if(document.hidden){S.arm=false;S.thr=0} });
+
+/* =====================  main render loop  ===================== */
+const cDrone=$('canvas',els.drone), cHor=$('canvas',els.horizon);
+const thrTrk=$('.trk',els.thr), yawTrk=$('.trk',els.yaw);
+function batPct(v){const t=[[3.3,0],[3.5,10],[3.7,40],[3.8,60],[3.9,75],[4.0,88],[4.2,100]];
+  if(v<=t[0][0])return 0;for(let i=1;i<t.length;i++)if(v<=t[i][0])return Math.round(t[i-1][1]+(t[i][1]-t[i-1][1])*(v-t[i-1][0])/(t[i][0]-t[i-1][0]));return 100}
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(0.1,(now-last)/1000);last=now;
+  if(demo)demoStep(now/1000);
+  const live=(connected&&T.have&&now-T.t<600)||demo;
+  const k=1-Math.pow(0.0005,dt);                       // smooth 20 Hz data for drawing
+  V.roll+=(T.roll-V.roll)*k;V.pitch+=(T.pitch-V.pitch)*k;
+  for(let i=0;i<4;i++)V.mot[i]+=(T.mot[i]-V.mot[i])*k;
+
+  // UI sync: if the drone says SAFE while ARM is on, flip ARM back off and say why
+  if(S.arm&&live&&T.state===0&&!demo){ if(!armSince)armSince=now; else if(now-armSince>700){S.arm=false;armSince=0;toast(REASON[T.reason]||'Not armed')} }
+  else armSince=0;
+  if(live&&T.state===1&&T.reason===0){}               // armed OK
+
+  // controls
+  const tv=S.thr;
+  $('.fill',els.thr).style.height=(tv*100)+'%'; $('.kn',els.thr).style.bottom=(tv*100)+'%'; $('.val',els.thr).textContent=Math.round(tv*100)+'%';
+  const yv=S.yaw,yf=$('.fill',els.yaw);
+  yf.style.left=(yv<0?50+yv*50:50)+'%';yf.style.width=Math.abs(yv)*50+'%';$('.kn',els.yaw).style.left=(50+yv*50)+'%';
+  $('.val',els.yaw).textContent=yv===0?'0':(yv>0?'R ':'L ')+Math.round(Math.abs(yv)*100);
+  const ab=$('#armBtn');ab.classList.toggle('on',S.arm);ab.textContent=S.arm?'ARMED':'ARM';
+
+  // telemetry
+  if(live){
+    const pct=batPct(T.vbat);
+    $('#tBatt').textContent=T.vbat.toFixed(2)+' V  ~'+pct+'%'+(T.low?'  LOW':'');
+    $('#tBar').style.width=pct+'%';$('#tBar').style.background=T.low||pct<15?'#ff4d5e':pct<35?'#ffb020':'#35d0a0';
+    const st=$('#tState');st.textContent=T.state?'ARMED':'SAFE'+(T.reason&&!S.arm?': '+REASON[T.reason]:'');st.style.color=T.state?'#ff4d5e':'#35d0a0';
+    $('#tLink').textContent=demo?'demo':Math.round(now-T.t)+' ms';
+    $('#tRP').textContent=T.roll.toFixed(1)+'° / '+T.pitch.toFixed(1)+'°';
+    if(!demo)setStat(T.state?'ARMED':'connected, safe',T.state?'#ff4d5e':'#35d0a0');
+  } else {
+    $('#tBatt').textContent='--';$('#tBar').style.width='0';$('#tState').textContent='--';$('#tLink').textContent=connected?'waiting...':'--';$('#tRP').textContent='--';
+  }
+  const tb=[...document.querySelectorAll('#tuneBox input,#tuneBox button')];
+  const canTune=live&&T.state===0;tb.forEach(x=>x.disabled=!canTune);
+
+  if(L.horizon.vis)drawHorizon(cHor,V.roll,V.pitch);
+  if(L.drone.vis)drawDrone(cDrone,V.roll,V.pitch,V.mot);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if(!navigator.bluetooth)showMsg('Web Bluetooth is not available here. Use Chrome on Android and open the https link. (Demo mode still works.)');
+</script>
+</body>
+</html>
